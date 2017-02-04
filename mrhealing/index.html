@@ -7,8 +7,6 @@
  <div id="branch-list">
 
    <button v-on:click="showData">위치 재확인</button>
-   {{  lat }}<br>
-   {{  lon }}
     <ul>
         <li v-for="data in response">
             {{data.title}}
@@ -37,21 +35,6 @@ var branchList = new Vue({
         this.showData()
         this.fetchData();
     },
-    watch: {
-        lat: function(){
-            console.log('lat 바뀐다.');
-                            console.log(this.response);
-            this.resort(this.lat, this.lon );
-                            console.log(this.lat);
-        },
-        lon: function(){
-            console.log(' lon바뀐다.');
-                            console.log(this.response);
-            this.resort(this.lat, this.lon );
-
-                console.log(this.lon);
-        }
-    },
     methods: {
         //현재 위치 정보 알아보는 메소드
         showData(){
@@ -67,6 +50,7 @@ var branchList = new Vue({
             this.lon=position.coords["longitude"];
             var url="http://maps.googleapis.com/maps/api/geocode/json?latlng="+this.lat+","+this.lon+"&sensor=false";
              //location.href = url;//페이지 이동하기
+            this.resort(position.coords["latitude"] , position.coords["longitude"]);
          },
          //실패시
           fail(err){
@@ -115,7 +99,7 @@ var branchList = new Vue({
 
             document.getElementsByTagName('head')[0].appendChild(script);
           },
-        resort: function(latitude, longitude){
+        resort: function(lat1, lon1){
           function distance(lat1, lon1, lat2, lon2, unit) {
              var radlat1 = Math.PI * lat1/180
              var radlat2 = Math.PI * lat2/180
@@ -129,22 +113,35 @@ var branchList = new Vue({
              if (unit=="N") { dist = dist * 0.8684 }
              return dist
           }
-
           this.response.forEach(function (item) {
-            item.distance += distance(this.lat, this.lon, item.latitude, item.longitude)
+            var lat2 = item.latitude;
+            var lon2 = item.longitude;
+            var unit = "K";
+            var radlat1 = Math.PI * lat1/180
+            var radlat2 = Math.PI * lat2/180
+            var theta = lon1-lon2
+            var radtheta = Math.PI * theta/180
+            var dist = Math.sin(radlat1) * Math.sin(radlat2) + Math.cos(radlat1) * Math.cos(radlat2) * Math.cos(radtheta);
+            dist = Math.acos(dist)
+            dist = dist * 180/Math.PI
+            dist = dist * 60 * 1.1515
+            if (unit=="K") { dist = dist * 1.609344 }
+            if (unit=="N") { dist = dist * 0.8684 }
+            item.distance = dist;
           })
           this.response.sort(function(a,b){
-              return ( a.distance < b.distance) ? -1 : ( a.distance > b.distance) ? 1 : 0;
+              return ( a.distance < b.distance) ? 1 : ( a.distance > b.distance) ? -1 : 0;
           });
 
         },
         fetchData: function () {
+          var self = this
             this.jsonp(apiUrl, {
               callbackName: 'callback',
               onSuccess: function(json){
                   this.response = json.data
                   console.log('success!',   this.response);
-              },
+              }.bind(this),
               onTimeout: function(){
                   console.log('timeout!');
               },
