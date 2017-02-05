@@ -1,21 +1,48 @@
 <header>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/1.0.26/vue.min.js">
+<script src="https://unpkg.com/vue@2.1.10/dist/vue.js">
 </script>
 </header>
-
-
- <div id="branch-list">
-
-   <button v-on:click="showData">위치 재확인</button>
+<div id="branch-list">
+    <button v-on:click="located">위치 재확인</button> <div class="loading">{{ loading }}</div>
     <ul>
-        <li v-for="data in response">
-            {{data.title}}
-            [ <span class="distance">{{ data.distance }}</span> ]
+        <li class="click" v-for="(data, index ) in response" v-on:click="selectBranch" v-if="data.distance >= -1" >
+          {{data.title}}
+          <span v-if="data.distance <= -1" class="distance loading">계산중..</span>
+          <span v-else-if="data.distance <= 10" class="distance good">{{ data.distance }}km</span>
+          <span v-if="data.distance  > 10" class="distance farfar">지역초과</span>
         </li>
     </ul>
 </div>
 
-
+<style>
+.loading{
+  padding: 5px;
+  font-size: 0.9em;
+  color: #ccc;
+}
+ul{
+  padding-left: 0px;
+  margin: 0px;
+}
+.distance.good{ color: blue}
+.distance.farfar{ color: #ccc}
+.distance.loading{ color: yellow}
+ul li.click:first-child {
+  font-weight: bold;
+}
+.click{
+  cursor: pointer;
+  border: 1px solid blue;
+  padding: 3px;
+  display: inline-block;
+  margin: 3px;
+  border-radius: 2px;
+  background-color: #eee;
+}
+.click:hover{
+  background-color: #ddd;
+}
+</style>
 <script type="text/javascript">
   window.onload=function(){
     //위치정보를 확인할 수 있는 브라우저인지 확인
@@ -27,21 +54,35 @@
 
 
 var apiUrl = 'http://ajinbooking.startupsite.in/wp-admin/admin-ajax.php?action=list_brandbranch_info&brand=%EB%AF%B8%EC%8A%A4%ED%84%B0%ED%9E%90%EB%A7%81'
-apiUrl = 'https://odengio.github.io/odengio/mrhealing/admin-ajax.js';
+//apiUrl = 'https://odengio.github.io/odengio/mrhealing/admin-ajax.js';
 var branchList = new Vue({
     el: '#branch-list',
-    data: {response : '',lat : 0,lon : 0  },
-    created: function () {
-        this.showData()
+    data: {response : [],lat : 0,lon : 0 ,loading :"" },
+    created: function (){
+        this.located();
         this.fetchData();
     },
     methods: {
+        located(){
+            console.log('selectBranch');
+            this.response.forEach(function (item) {
+              item.distance = -1;
+            })
+            this.showData();
+            this.resort();
+
+        },
+        selectBranch(){
+            console.log('selectBranch');
+        },
         //현재 위치 정보 알아보는 메소드
         showData(){
+            this.loading = "위치 확인중....";
             navigator.geolocation.getCurrentPosition(this.success, this.fail);
             //현재 위치 정보를 조사하고 성공 실패 했을시 호출되는 함수 설정
         },
         success(position) { //성공시
+
             this.log("위치정보 확인 성공!");
             for(var property in position.coords) { //반복문 돌면서 출력
                 this.log("Key 값:"+property+" 정보:"+position.coords[property]);
@@ -51,6 +92,8 @@ var branchList = new Vue({
             var url="http://maps.googleapis.com/maps/api/geocode/json?latlng="+this.lat+","+this.lon+"&sensor=false";
              //location.href = url;//페이지 이동하기
             this.resort(position.coords["latitude"] , position.coords["longitude"]);
+            console.log('resort');            this.loading = "계산완료";
+
          },
          //실패시
           fail(err){
@@ -75,6 +118,7 @@ var branchList = new Vue({
          },
         log(msg){
             console.log(msg);
+
          },
         jsonp(src, options) {
             var callback_name = options.callbackName || 'callback',
@@ -114,28 +158,24 @@ var branchList = new Vue({
              return dist
           }
           this.response.forEach(function (item) {
+
             var lat2 = item.latitude;
             var lon2 = item.longitude;
             var unit = "K";
-            var radlat1 = Math.PI * lat1/180
-            var radlat2 = Math.PI * lat2/180
-            var theta = lon1-lon2
-            var radtheta = Math.PI * theta/180
-            var dist = Math.sin(radlat1) * Math.sin(radlat2) + Math.cos(radlat1) * Math.cos(radlat2) * Math.cos(radtheta);
-            dist = Math.acos(dist)
-            dist = dist * 180/Math.PI
-            dist = dist * 60 * 1.1515
-            if (unit=="K") { dist = dist * 1.609344 }
-            if (unit=="N") { dist = dist * 0.8684 }
-            item.distance = dist;
+            item.distance = parseInt(distance(lat1, lon1, lat2, lon2, unit) * 10) /10;
           })
           this.response.sort(function(a,b){
-              return ( a.distance < b.distance) ? 1 : ( a.distance > b.distance) ? -1 : 0;
+              return ( a.distance < b.distance) ? -1 : ( a.distance > b.distance) ? 1 : 0;
           });
+          if(this.response.length > 5){
+            this.response = this.response.slice(0,5);
+            this.msg = "가장 가까운 5개 지점만 표시합니다. ";
+            this.loading = "계산완료";
+          }
 
+          console.log('계산완료');
         },
         fetchData: function () {
-          var self = this
             this.jsonp(apiUrl, {
               callbackName: 'callback',
               onSuccess: function(json){
@@ -150,7 +190,4 @@ var branchList = new Vue({
         }
     }
 })
-
-
-
 </script>
