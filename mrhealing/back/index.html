@@ -1,0 +1,681 @@
+<!html>
+<header>
+  <meta name="format-detection" content="telephone=no">
+
+  <script src="https://unpkg.com/vue@2.1.10/dist/vue.js"></script>
+  <script src="./moment-with-locales.min.js"></script>
+</header>
+<div id="branch-list">
+  <h3>지점선택</h3>
+    <button v-on:click="located">위치 재확인</button> <div class="loading">{{ loading }}</div>
+    <ul>
+        <li class="click" v-for="(item, index ) in response"
+          v-on:click="selectBranch(item)" v-if="item.distance >= -1" >
+          <span v-if="item.distance <= 10" class="title good">{{item.title}}</span>
+          <span v-if="item.distance  > 10" class="title farfar">{{item.title}}</span>
+          <span v-if="item.distance <= -1" class="distance loading">계산중..</span>
+          <span v-else-if="item.distance <= 10" class="distance good">{{ item.distance }}km</span>
+        </li>
+    </ul>
+</div>
+<hr>
+<div id="branch-info" v-if="branch">
+  <h3>지점 <span class="title">{{branch.title}}<span> <span class="id">{{ branch.ID }}</span></h3>
+  <div class="group">
+    <label>운영시간</label> : {{branch.starttime}}시 ~ {{branch.endtime}}시
+  </div>
+  <div class="group">
+    <label>전화번호</label> : <a class="link" href="tel:" >{{branch.tel}}</a>
+  </div>
+  <div class="group">
+    <label>예약가능</label><span class="loading">{{ loading }}</span>
+    <span class="space" v-if="available.length > 0">{{ available.length }}자리 {{ parseInt(available.length / branch.device * 100) }}% 남음</span>
+    <li class="click" v-for="(item, index ) in available">
+      {{item.title}} <span class="service_id">{{item.ID}}</span>
+    </li>
+  </div>
+  <div class="group">
+    <label>예약현황</label><span class="loading">{{ loading2 }}</span>
+    <li class="click" v-for="(item, index ) in bookings" v-if="item.service_id">
+      {{item.bookdate2}} <span class="device_num">{{item.service_id}}</span>
+    </li>
+  </div>
+</div>
+<hr>
+<div id="booking-calender">
+  <h3>예약 <span class="selectCnt">{{selectCnt}}시간 선택</span>
+    <span v-if="selectCnt != 0" v-on:click="resetSelect()" class="click font-small">선택취소</span>
+    <span v-if="selectCnt == 0" class="loading">시간을 선택하세요.</span>
+  <span v-if="msg.length != 0" class="msg">{{msg}}</span></h3>
+  <div class="week">
+    <li class="day" v-for="(item, index ) in days">
+      <div class="date">{{item.date}}</div>
+      <div class="day_of_week">{{item.day_of_week}}</div>
+      <div class="from_now">{{item.from_now}}</div>
+    </li>
+    <div class="day-wapper">
+    <li class="day" v-for="(item, index ) in days">
+      <ul class="times">
+        <li v-if="index == 0" class="clock time" v-for="(time, index2 ) in item.times">
+          <span class="ok">{{time.ok}}</span>
+        </li>
+        <li v-if="index != 0" v-on:click="selectTime(index2, time,index, item, item.times)"
+        :class="time.class" v-for="(time, index2 ) in item.times">
+          <span >{{time.ok}}</span>
+        </li>
+      </ul>
+    </li>
+    </div>
+
+    <h4>- 인원</h4>
+    <a class="button" v-on:click="setPeople(1)">1명</a>
+    <a class="button" v-on:click="setPeople(2)">2명</a>
+    <a class="button" v-on:click="setPeople(3)">3명</a>
+    <a class="button" v-on:click="setPeople(4)">4명</a>
+    <a class="button" v-on:click="setPeople(5)">5명</a>
+    <input class="input-s" v-model="people" placeholder="본인포함 총인원을 선택 및 입력해주세요">명
+    <h4>- 예약자명</h4>
+    <input class="" v-model="book_name" placeholder="예약자 이름을 입력">
+    <h4>- 예약자 연락처</h4>
+    <input class="" v-model="book_tel" placeholder="예약자 전화번호를 입력해주세요.">
+    <h4>- 장치선택</h4>
+    <a class="button" v-on:click="SetDeviceMode('A')">A모드</a>
+    <a class="button" v-on:click="SetDeviceMode('B')">B모드</a>
+    <a class="button" v-on:click="SetDeviceMode('C')">C모드</a>
+    <a class="button" v-on:click="SetDeviceMode('D')">D모드</a>
+    <input class="input-s" v-model="device_mode" placeholder="장치모드는 현장에서 다시 변경 가능합니다.">모드
+    <hr>
+    <h3>예약</h3>
+    <button class="click" v-on:click="booking">위의 예약을 진행합니다</button>
+    <p>"<span class="underline">{{ branch.title }}</span>에서
+       <span class="underline">{{ people }}명</span>({{book_name}},{{book_tel}},)이
+       <span class="underline">{{selectDay}}</span>
+       <span class="underline">{{getStartTime()}}시</span>부터
+       <span class="underline">{{selectedTime.length}}시간</span>을
+       <span class="underline">{{device_mode}} 모드</span>를 사용해서
+       <span class="underline">예약</span>합니다."</p>
+    </div>
+</div>
+
+<style>
+.font-small{
+  font-size: 0.5em;
+}
+.button {
+    display: inline-block;
+    white-space: nowrap;
+    background-color: #ccc;
+    background-image: linear-gradient(top, #eee, #ccc);
+    filter: progid:DXImageTransform.Microsoft.gradient(startColorStr='#eeeeee', EndColorStr='#cccccc');
+    border: 1px solid #777;
+    padding: 0 1.5em;
+    margin: 0.5em;
+    font: bold 0.7em/2em Arial, Helvetica;
+    text-decoration: none;
+    color: #333;
+    text-shadow: 0 1px 0 rgba(255,255,255,.8);
+    border-radius: .2em;
+    box-shadow: 0 0 1px 1px rgba(255,255,255,.8) inset, 0 1px 0 rgba(0,0,0,.3);
+}
+
+.button:hover {
+    background-color: #ddd;
+    background-image: linear-gradient(top, #fafafa, #ddd);
+    filter: progid:DXImageTransform.Microsoft.gradient(startColorStr='#fafafa', EndColorStr='#dddddd');
+}
+
+.button:active {
+    box-shadow: 0 0 4px 2px rgba(0,0,0,.3) inset;
+    position: relative;
+    top: 1px;
+}
+
+.button:focus {
+    outline: 0;
+    background: #fafafa;
+}
+
+.button:before {
+    background: #ccc;
+    background: rgba(0,0,0,.1);
+    float: left;
+    width: 1em;
+    text-align: center;
+    font-size: 1.5em;
+    margin: 0 1em 0 -1em;
+    padding: 0 .2em;
+    box-shadow: 1px 0 0 rgba(0,0,0,.5), 2px 0 0 rgba(255,255,255,.5);
+    border-radius: .15em 0 0 .15em;
+    pointer-events: none;
+}
+
+/* booking-calender */
+input.input-s{
+  width: 45px;
+}#booking-calender h3 {
+    height: 27px;
+    margin-bottom: 10px;
+}
+.week li.day:nth-child(2) div.from_now {
+    color: #000 !important;
+    font-weight:bold;
+}
+p {
+    color: #777;font-size: 0.9em;
+}
+.underline{
+      color: #000;font-size: 1.1em;
+  border-bottom: 1px solid darkblue;
+}
+button.click {
+    font-size: 1.1em;
+    font-weight: bold;
+}
+.selectCnt {
+    color: darkblue;
+    font-size: 0.8em;
+    border-bottom: 1px solid darkblue;
+}
+li.clock.time {
+    border: 1px dotted #fff;
+}
+li.time.v {
+    background-color: #eaeffb;
+    /* color: #fff; */
+    border: 1px solid #2f67e4;
+}
+li.clock.time:hover {
+    background-color: #fff;
+}
+li.clock span.ok {
+    color: blue;
+    font-size: 0.8em;
+    border: 0px !IMPORTANT;
+}
+span.id, span.space, span.device_num, span.service_id
+, div.day_of_week
+, div.from_now
+, div.day_of_week
+{
+  font-size: 0.5em;color: #ccc;
+}
+li.day {
+    display: inline-block;
+    width: 35px;    text-align: center;
+}
+li.time:hover {
+    background-color: #bbb;
+}
+ul.times {
+    list-style: none;
+    /* overflow-y: auto; */
+    /* height: 196px; */
+}
+
+li.time {
+    text-align: center;
+    border: 1px dotted #ccc;
+    margin: 2px;
+    line-height: 24px;
+    width: 31px;
+}
+
+.day-wapper {
+    overflow-y: auto;
+    height: 185px;
+    border: 1px solid #ccc;    width: 235px;
+}
+/* branch-info */
+#branch-info h3 span.title {
+  color: darkblue;
+  border-bottom: 1px solid darkblue;
+}
+span.id, span.space, span.device_num, span.service_id{
+  font-size: 0.5em;color: #ccc;
+}
+/* branch-list */
+#branch-list ul {
+    height: 2em;
+}
+.loading{
+  padding: 5px;
+  font-size: 0.9em;
+  color: #ccc;
+}
+ul{
+  padding-left: 0px;
+  margin: 0px;
+}
+.distance{
+  font-size: 0.8em;
+}
+.distance.good{ color: blue}
+.distance.farfar{ color: #ccc}
+.title.farfar{ color: #ccc}
+.distance.loading{ color: yellow}
+ul li.click:first-child span.title.good {
+  font-weight: bold;
+}a.link {
+    text-decoration: none;
+}
+a.link:after {
+    content: ">";
+    background-color: #7e9aff;
+    border-radius: 7px;
+    color: #000;
+    padding-left: 7px;
+    padding-right: 5px;
+    font-size: 14px;
+    margin-left: 3px;
+    /* margin-bottom: 1px; */
+    vertical-align: text-top;
+}
+.click{
+  cursor: pointer;
+  border: 1px solid blue;
+  padding: 3px;
+  display: inline-block;
+  margin: 3px;
+  border-radius: 2px;
+  background-color: #eee;
+}
+.click:hover{
+  background-color: #ddd;
+}
+</style>
+<script type="text/javascript">
+
+function jsonp(src, options) {
+    var callback_name = options.callbackName || 'callback',
+      on_success = options.onSuccess || function(){},
+      on_timeout = options.onTimeout || function(){},
+      timeout = options.timeout || 10; // sec
+
+    var timeout_trigger = window.setTimeout(function(){
+      window[callback_name] = function(){};
+      on_timeout();
+    }, timeout * 1000);
+
+    window[callback_name] = function(data){
+      window.clearTimeout(timeout_trigger);
+      on_success(data);
+    }
+
+    var script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.async = true;
+    script.src = src + "&callback=" + callback_name;
+
+    document.getElementsByTagName('head')[0].appendChild(script);
+  }
+  window.onload=function(){
+    //위치정보를 확인할 수 있는 브라우저인지 확인
+    if(navigator.geolocation == undefined){
+        alert("위치 정보 기능을 지원하지 않습니다!")
+        return;
+    }
+ }
+
+//var domain = 'https://ajinbooking.herokuapp.com';
+var domain = 'http://ajinbooking.startupsite.in';
+moment.locale('ko');
+var bookingCalender = new Vue({
+     el: '#booking-calender',
+     data : {
+       url : domain + "/wp-admin/admin-ajax.php?action=list_available_info&brand=%EB%AF%B8%EC%8A%A4%ED%84%B0%ED%9E%90%EB%A7%81"
+       ,year:""
+       ,month:""
+       ,days :[]
+       ,loading :""
+       ,msg :""
+       ,selectCnt :0
+       ,startTime : -1
+       ,endTime : 999
+       ,selectedTime : []
+       ,selectDay :"오늘"
+       ,selectDate : -1
+       ,people :0
+       ,device_mode :"A"
+       ,book_name :""
+       ,book_tel :""
+       ,booking_button :""
+       ,branch:{
+         title :' __ 지점 '
+         ,startTime : 0
+         ,endTime : 0
+       }
+     },
+     created: function (){
+         this.setNow();
+     },watch:{
+       branch : function(){
+         this.resetSelect();
+       }
+     },
+     methods:{
+       setNow( ){
+         this.year = moment().format('YYYY');
+         this.month = moment().format('MMM');
+         this.today = moment().format('Do');
+         this.resetSelect();
+        },
+        resetSelect(){
+          this.days = [];
+          var _times = [];
+          for (j = 0; j < 12; j++) {
+            if( j + parseInt(this.branch.starttime)  <= 12 )//오전
+              _times[j] = {  ok : ''+ (j + parseInt(this.branch.starttime) )+'시' }
+            else
+              _times[j] = {  ok : ''+ (j-12 + parseInt(this.branch.starttime) )+'시' }
+          }
+          this.days[0] = {
+            date : ''
+            ,day_of_week : ''
+            ,from_now : ''
+            ,times : _times
+           };
+          for (i = 1; i < 6; i++) {
+            var _day = moment().add(i-1, 'days');
+            _times = [];
+            for (j = 0; j < 12; j++) {
+              _times[j] = {
+                 ok : 'o', class:'time'
+              }
+            }
+            this.days[i] = {
+              date : _day.format('Do')
+              ,day_of_week : _day.format('dddd').replace("요일","")
+              ,from_now : _day.fromNow().replace("하루 후","내일").replace("몇 초 전","오늘")
+              ,times : _times
+             };
+          }
+          this.selectCnt = 0;
+          this.startTime = -1;
+          this.endTime = 999;
+          this.selectDay = "오늘";
+          this.selectDate = -1;
+        },
+        getStartTime(){
+          var _min = 999;
+          this.selectedTime.forEach(function (item) {
+            if( _min > item )
+              _min = item;
+          })
+          return _min;
+        }
+        ,
+        selectTime(time_index, time, day_index,day,times){
+
+          console.log('selectTime' + this.branch);
+          console.log( this.branch);
+          if( this.selectDate != -1 && this.selectDate != day_index ){
+            this.msg = "같은날만 선택가능합니다. ";
+
+          //  this.resetSelect();
+            return;
+          }else this.selectDate = day_index;
+          //
+          // if( this.startTime != -1 && this.startTime < time_index + parseInt(this.branch.starttime) ){
+          //   this.msg = "시간은 이어서만 선택가능합니다. up";
+          //   return;
+          // }else{
+          //   this.startTime = time_index + parseInt(this.branch.starttime );
+          // }
+          // if( this.endTime != 999 && this.endTime != time_index + parseInt(this.branch.starttime) ){
+          //   this.msg = "시간은 이어서만 선택가능합니다. down";
+          //   return;
+          // }else{
+          //   if( this.endTime > time_index + parseInt(this.branch.starttime )){
+          //     this.endTime = time_index + parseInt(this.branch.starttime );
+          //   }
+          // }
+          function arrayContains(list, object) {
+            return (list.filter(function(currentObject) {
+              if (currentObject === object) {
+                return currentObject
+              }
+              else {
+                return false;
+              }
+            }).length > 0) ? true : false
+          }
+          var _time = time_index + parseInt(this.branch.starttime);
+          if (arrayContains(this.selectedTime, _time)){
+            this.selectedTime.pop(_time);
+          }else{
+            this.selectedTime.push(_time);
+          }
+          console.log(this.selectedTime);
+          this.msg = "";
+
+          //  선택가능
+          if( day.times[time_index].class == 'time' ){
+            day.times[time_index].class = 'time v';
+            this.selectCnt += 1;
+          }
+          else {
+            day.times[time_index].class = 'time';
+            this.selectCnt -= 1;
+          }
+          Vue.set(this.days, day_index, day);
+        },
+        booking(){
+          console.log('booking');
+        },
+        setPeople(num){
+          this.people = num;
+        },
+        SetDeviceMode(mode){
+          this.device_mode = mode;
+        }
+     }
+   }
+ );
+ var branchInfo = new Vue({
+      el: '#branch-info',
+      data : {
+        url : domain + "/wp-admin/admin-ajax.php?action=list_available_info&brand=%EB%AF%B8%EC%8A%A4%ED%84%B0%ED%9E%90%EB%A7%81"
+        ,branch :{}
+        ,available :""
+        ,bookings :""
+        ,loading :""
+        ,loading2 :""
+      },
+      watch:{
+        branch : function(){
+         this.available = '';
+         this.bookings = '';
+         this.updateBranchAvailable();
+         this.listBranchBookingInfo();
+         /*하위 전파!*/
+         bookingCalender.$data.branch = this.branch;
+         console.log(this.branch);
+        }
+      },
+      methods:{
+        updateBranchAvailable( ){
+          this.loading = '로딩중';
+          jsonp(this.url + '&branch_id=' + this.branch.ID, {
+            callbackName: 'callbackBranchAvailable',
+            onSuccess: function(json){
+               this.loading =  '';
+                this.available = json.data
+                console.log('success!',   this.response);
+            }.bind(this),
+            onTimeout: function(){
+                console.log('timeout!');
+            },
+            timeout: 5
+          });
+        },
+        api( action ){
+          return domain + "/wp-admin/admin-ajax.php?action=" +action+ "&brand=%EB%AF%B8%EC%8A%A4%ED%84%B0%ED%9E%90%EB%A7%81";
+        },
+        listBranchBookingInfo( ){
+          this.loading2 = '로딩중';
+
+          jsonp(this.api('list_branch_booking_info') + '&branch_id=' + this.branch.ID, {
+            callbackName: 'callbackBranchBookingInfo',
+            onSuccess: function(json){
+               this.loading2 =  '';
+                this.bookings = json.data;
+                this.bookings.forEach(function (item) {
+                  console.log(item.bookdate);
+                  t = new Date( item.bookdate * 1000);
+                  console.log(t);
+                  item.bookdate2 = moment(t).fromNow();
+                  console.log(item.bookdate2);
+                  return item;
+                })
+
+                  console.log(this.bookings);
+                console.log('success!',   this.response);
+            }.bind(this),
+            onTimeout: function(){
+                console.log('timeout!');
+            },
+            timeout: 5
+          });
+        }
+      }
+    }
+  );
+
+var apiUrl = domain + '/wp-admin/admin-ajax.php?action=list_brandbranch_info&brand=%EB%AF%B8%EC%8A%A4%ED%84%B0%ED%9E%90%EB%A7%81'
+//apiUrl = 'https://odengio.github.io/odengio/mrhealing/admin-ajax.js';
+var branchList = new Vue({
+    el: '#branch-list',
+    data: {response : [],lat : 0,lon : 0 ,loading :"" },
+    created: function (){
+        this.located();
+        this.fetchData();
+    },
+    methods: {
+        located(){
+            //console.log('selectBranch');
+            this.response.forEach(function (item) {
+              item.distance = -1;
+            })
+            this.showData();
+            this.resort();
+
+        },
+        selectBranch( item ){
+            branchInfo.$data.branch = item;
+        },
+        //현재 위치 정보 알아보는 메소드
+        showData(){
+            this.loading = "위치 확인중....";
+            navigator.geolocation.getCurrentPosition(this.success, this.fail);
+            //현재 위치 정보를 조사하고 성공 실패 했을시 호출되는 함수 설정
+        },
+        success(position) { //성공시
+
+            //this.log("위치정보 확인 성공!");
+            for(var property in position.coords) { //반복문 돌면서 출력
+                //this.log("Key 값:"+property+" 정보:"+position.coords[property]);
+            }
+            this.lat=position.coords["latitude"];
+            this.lon=position.coords["longitude"];
+            var url="http://maps.googleapis.com/maps/api/geocode/json?latlng="+this.lat+","+this.lon+"&sensor=false";
+             //location.href = url;//페이지 이동하기
+            this.resort(position.coords["latitude"] , position.coords["longitude"]);
+            this.loading = "지점을 선택하세요.";
+
+         },
+         //실패시
+          fail(err){
+            switch (err.code){
+                case err.PERMISSION_DENIED:
+                    msg = "사용자 거부";
+                break;
+
+                case err.PERMISSION_UNAVAILABLE:
+                    msg = "지리정보를 얻을 수 없음";
+                break;
+
+                case err.TIMEOUT:
+                    msg = "시간초과";
+                break;
+
+                case err.UNKNOWN_ERROR:
+                    msg = "알 수 없는 오류 발생";
+                break;
+            }
+                this.log(msg);
+         },
+        log(msg){
+            console.log(msg);
+
+         },
+        jsonp(src, options) {
+            var callback_name = options.callbackName || 'callback',
+              on_success = options.onSuccess || function(){},
+              on_timeout = options.onTimeout || function(){},
+              timeout = options.timeout || 10; // sec
+
+            var timeout_trigger = window.setTimeout(function(){
+              window[callback_name] = function(){};
+              on_timeout();
+            }, timeout * 1000);
+
+            window[callback_name] = function(data){
+              window.clearTimeout(timeout_trigger);
+              on_success(data);
+            }
+
+            var script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.async = true;
+            script.src = src;
+
+            document.getElementsByTagName('head')[0].appendChild(script);
+          },
+        resort: function(lat1, lon1){
+          function distance(lat1, lon1, lat2, lon2, unit) {
+             var radlat1 = Math.PI * lat1/180
+             var radlat2 = Math.PI * lat2/180
+             var theta = lon1-lon2
+             var radtheta = Math.PI * theta/180
+             var dist = Math.sin(radlat1) * Math.sin(radlat2) + Math.cos(radlat1) * Math.cos(radlat2) * Math.cos(radtheta);
+             dist = Math.acos(dist)
+             dist = dist * 180/Math.PI
+             dist = dist * 60 * 1.1515
+             if (unit=="K") { dist = dist * 1.609344 }
+             if (unit=="N") { dist = dist * 0.8684 }
+             return dist
+          }
+          this.response.forEach(function (item) {
+
+            var lat2 = item.latitude;
+            var lon2 = item.longitude;
+            var unit = "K";
+            item.distance = parseInt(distance(lat1, lon1, lat2, lon2, unit) * 10) /10;
+          })
+          this.response.sort(function(a,b){
+              return ( a.distance < b.distance) ? -1 : ( a.distance > b.distance) ? 1 : 0;
+          });
+          if(this.response.length > 5){
+            this.response = this.response.slice(0,5);
+            this.msg = "가장 가까운 5개 지점만 표시합니다. ";
+            this.loading = "지점을 선택하세요.";
+          }
+
+          //console.log('지점을 선택하세요.');
+        },
+        fetchData: function () {
+            this.jsonp(apiUrl, {
+              callbackName: 'callback',
+              onSuccess: function(json){
+                  this.response = json.data
+                  console.log('success!',   this.response);
+              }.bind(this),
+              onTimeout: function(){
+                  console.log('timeout!');
+              },
+              timeout: 5
+            });
+        }
+    }
+})
+</script>
